@@ -41,7 +41,31 @@ jobs:
         run: python -m pytest B/tests -q
 
       - name: App backend - API, idempotency, concurrency, contract
-        run: python -m pytest app/backend/tests -q
+        # Run each module separately so a failure names itself, and surface the
+        # first failure as a check-run annotation: annotations are readable
+        # without a token, job logs are not.
+        run: |
+          set +e
+          overall=0
+          reported=0
+          for module in test_store test_endpoints test_contract test_catalog test_cart test_idempotency test_concurrency; do
+            echo "::group::$module"
+            python -m pytest "app/backend/tests/$module.py" -q --tb=short > "/tmp/$module.log" 2>&1
+            code=$?
+            tail -n 30 "/tmp/$module.log"
+            if [ "$code" -ne 0 ]; then
+              overall=1
+              echo "::error::$module failed (exit $code)"
+              if [ "$reported" -eq 0 ]; then
+                reported=1
+                grep -E '^(FAILED|ERROR)|^E   ' "/tmp/$module.log" | head -n 8 | while IFS= read -r line; do
+                  echo "::error::$line"
+                done
+              fi
+            fi
+            echo "::endgroup::"
+          done
+          exit $overall
 
       - name: Documented CLI examples still match the statement
         run: |
