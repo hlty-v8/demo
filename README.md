@@ -216,7 +216,7 @@ repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
 | Frontend tests | `pnpm test` (vitest) | **29 passed** |
 | Frontend typecheck | `pnpm typecheck` | clean (includes the Playwright specs) |
 | Frontend build | `pnpm build` | succeeds (≈155 kB JS, ≈50 kB gzip) |
-| Browser end-to-end | `pnpm e2e` (Playwright, CI) | 4 tests: variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
+| Browser end-to-end | `pnpm e2e` (Playwright) | **4 passed in CI** (Chromium against the production build proxied to a real uvicorn): variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
 
 ### Two host quirks worth recording
 

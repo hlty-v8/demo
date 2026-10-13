@@ -17,6 +17,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Playwright artefacts (produced by `pnpm e2e`)
+playwright-report/
+test-results/
+blob-report/
+
 # Environment and secrets - never commit these
 .env
 .env.*
