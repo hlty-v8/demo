@@ -1,0 +1,80 @@
+name: CI
+
+# Runs everything the local machine cannot: the ASGI test suites need an asyncio
+# event loop, and on Windows asyncio builds its self-pipe from socket.socketpair()
+# (a loopback connection). On the development host loopback connections to a
+# listening socket are dropped, so uvicorn and Starlette's TestClient cannot run
+# there at all. Linux runners use AF_UNIX for that self-pipe, so the full suite
+# runs here.
+#
+# Everything is public-safe: no credentials, no secrets, no external services.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Tasks A/B and the API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r app/backend/requirements-dev.txt
+
+      - name: Task A - inventory reservation ledger
+        run: python -m pytest A/tests -q
+
+      - name: Task B - fulfilment split optimiser
+        run: python -m pytest B/tests -q
+
+      - name: App backend - API, idempotency, concurrency, contract
+        run: python -m pytest app/backend/tests -q
+
+      - name: Documented CLI examples still match the statement
+        run: |
+          diff <(python A/solution.py --input A/tests/sample_input.txt) A/tests/sample_output.txt
+          diff <(python B/solution.py --input B/tests/sample_input.txt) B/tests/sample_output.txt
+
+  frontend:
+    name: Variant PDP frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit and component tests
+        run: pnpm test
+
+      - name: Production build
+        run: pnpm build
