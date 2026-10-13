@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import solution
+import ledger
 
 HERE = Path(__file__).resolve().parent
 SAMPLE_INPUT = HERE / "sample_input.txt"
@@ -25,20 +25,20 @@ def test_sample_files_are_present():
 
 
 def test_cli_input_flag_reproduces_the_expected_output(tmp_path, capsys):
-    exit_code = solution.main(["--input", str(SAMPLE_INPUT)])
+    exit_code = ledger.main(["--input", str(SAMPLE_INPUT)])
     captured = capsys.readouterr()
 
-    assert exit_code == solution.EXIT_OK
+    assert exit_code == ledger.EXIT_OK
     assert captured.out == SAMPLE_OUTPUT.read_text(encoding="utf-8")
     assert captured.err == ""
 
 
 @pytest.mark.parametrize("summary", ["count", "sum", "none"])
 def test_open_summary_flag_keeps_the_sample_status_lines(summary, capsys):
-    exit_code = solution.main(["--input", str(SAMPLE_INPUT), "--open-summary", summary])
+    exit_code = ledger.main(["--input", str(SAMPLE_INPUT), "--open-summary", summary])
     captured = capsys.readouterr()
 
-    assert exit_code == solution.EXIT_OK
+    assert exit_code == ledger.EXIT_OK
     status_lines = [
         line for line in captured.out.splitlines() if line.split(" ", 1)[0] in {"OK", "REJECTED", "DUPLICATE"}
     ]

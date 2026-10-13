@@ -11,8 +11,8 @@ allocated, under a strict three-level objective:
 ## Run
 
 ```bash
-python solution.py < input.txt          # stdin
-python solution.py --input input.txt    # file input
+python optimiser.py < input.txt          # stdin
+python optimiser.py --input input.txt    # file input
 pytest tests -q                          # tests
 ```
 
@@ -131,7 +131,7 @@ Avoiding factorisation is what makes this pass where brute force fails:
    stock below `Q`, a minimum count that cannot satisfy `Q >= count`, or a cost
    table with no reachable state (defensive; unreachable in practice).
 
-## Tests (`tests/test_solution.py`)
+## Tests (`tests/test_optimiser.py`)
 
 * the statement's sample, byte for byte;
 * infeasible orders, single-warehouse, zero-stock, stock-larger-than-`Q`;

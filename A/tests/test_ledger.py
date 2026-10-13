@@ -19,7 +19,7 @@ import time
 
 import pytest
 
-from solution import (
+from ledger import (
     DUPLICATE,
     EXIT_BAD_INPUT,
     EXIT_COMMAND_COUNT_MISMATCH,
@@ -192,8 +192,8 @@ MALFORMED_ROWS = [
     ("RESERVE e1 o1 1.0", "float qty"),
     ("RESERVE e1 o1 1e3", "exponent notation"),
     ("RESERVE e1 o1 abc", "non-numeric qty"),
-    ("RESERVE e1 订单 1", "non-ascii order id"),
-    ("RESERVE 事件 o1 1", "non-ascii event id"),
+    ("RESERVE e1 璁㈠崟 1", "non-ascii order id"),
+    ("RESERVE 浜嬩欢 o1 1", "non-ascii event id"),
     ("RESERVE e1 o1 1 2", "too many tokens"),
 ]
 
@@ -452,37 +452,37 @@ def test_two_hundred_thousand_commands_stay_linear():
 
 
 def test_cli_stdin_stdout_and_exit_code(monkeypatch, capsys):
-    import solution
+    import ledger
 
     monkeypatch.setattr(sys, "stdin", io.StringIO(SAMPLE_INPUT))
-    assert solution.main([]) == EXIT_OK
+    assert ledger.main([]) == EXIT_OK
     captured = capsys.readouterr()
     assert captured.out == SAMPLE_OUTPUT
     assert captured.err == ""
 
 
 def test_cli_exit_code_for_bad_header(monkeypatch, capsys):
-    import solution
+    import ledger
 
     monkeypatch.setattr(sys, "stdin", io.StringIO("nonsense\n"))
-    assert solution.main([]) == EXIT_BAD_INPUT
+    assert ledger.main([]) == EXIT_BAD_INPUT
     assert "error:" in capsys.readouterr().err
 
 
 def test_cli_exit_code_for_command_count_mismatch(monkeypatch, capsys):
-    import solution
+    import ledger
 
     monkeypatch.setattr(sys, "stdin", io.StringIO("5 3\nRESERVE a o1 1\n"))
-    assert solution.main([]) == EXIT_COMMAND_COUNT_MISMATCH
+    assert ledger.main([]) == EXIT_COMMAND_COUNT_MISMATCH
     captured = capsys.readouterr()
     assert captured.out.startswith("OK 5 1")
     assert "declared N=3" in captured.err
 
 
 def test_cli_reads_file_and_open_summary_flag(tmp_path, capsys):
-    import solution
+    import ledger
 
     path = tmp_path / "input.txt"
     path.write_text("20 1\nRESERVE a o1 3\n", encoding="utf-8")
-    assert solution.main(["--input", str(path), "--open-summary", "sum"]) == EXIT_OK
+    assert ledger.main(["--input", str(path), "--open-summary", "sum"]) == EXIT_OK
     assert capsys.readouterr().out == "OK 20 3\nOPEN 3\no1 3\n"

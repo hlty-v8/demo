@@ -7,8 +7,8 @@ prints one status line per command plus an open-reservation summary.
 ## Run
 
 ```bash
-python solution.py < input.txt          # stdin (the documented interface)
-python solution.py --input input.txt    # file input
+python ledger.py < input.txt          # stdin (the documented interface)
+python ledger.py --input input.txt    # file input
 pytest tests -q                          # tests
 ```
 
@@ -34,7 +34,7 @@ orders and makes the final `OPEN` section a plain sort of the live map.
 
 1. **Parse and validate** the whole row (verb, arity, ASCII markers, strictly
    positive integer quantity). Nothing is mutated here.
-2. If the event id is already in `_processed` → `DUPLICATE`, no state change.
+2. If the event id is already in `_processed` 鈫?`DUPLICATE`, no state change.
 3. Otherwise apply the business rule and record the outcome (including
    `REJECTED`) in `_processed`.
 
@@ -83,17 +83,17 @@ and switchable where the choice is genuinely a coin flip:
 
 * Time: **O(N)**. Each command costs O(1) amortised: one `split`, one constant
   number of dict operations. The only non-constant step is the final
-  `sorted()` over open orders, O(K log K) with K ≤ N, so the total is
+  `sorted()` over open orders, O(K log K) with K 鈮?N, so the total is
   O(N + K log K) = O(N log N) worst case and O(N) whenever K is bounded.
 * Space: **O(N)** worst case - O(E) for processed event ids and O(O) for open
-  orders, with E, O ≤ N. Closed orders are evicted, so the per-order map holds
+  orders, with E, O 鈮?N. Closed orders are evicted, so the per-order map holds
   only what is still open.
 * I/O: stdin is read once and stdout written once. This matters at
   N = 200,000: a `print` per line is measurably slower than one buffered write.
   The scale test asserts the whole 200,000-command run stays well inside a
   linear budget (observed ~1 s including parsing).
 
-## Tests (`tests/test_solution.py`)
+## Tests (`tests/test_ledger.py`)
 
 * the statement's sample, byte for byte;
 * idempotency: replay of accepted, replay of rejected, replay after the ledger

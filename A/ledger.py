@@ -2,8 +2,8 @@
 """Task A - deterministic inventory reservation ledger.
 
 Usage:
-    python solution.py < input.txt
-    python solution.py --input input.txt
+    python ledger.py < input.txt
+    python ledger.py --input input.txt
 
 Design notes (full write-up in README.md):
   * Parsing and execution are strictly separated: a row is fully parsed and
@@ -297,7 +297,7 @@ def solve(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="solution.py",
+        prog="ledger.py",
         description="Task A: deterministic inventory reservation ledger.",
     )
     parser.add_argument(

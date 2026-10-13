@@ -2,8 +2,8 @@
 """Task B - fulfilment split optimiser.
 
 Usage:
-    python solution.py < input.txt
-    python solution.py --input input.txt
+    python optimiser.py < input.txt
+    python optimiser.py --input input.txt
 
 Choose how much of an order each warehouse ships, with a strict three-level
 objective:
@@ -311,7 +311,7 @@ def solve(text: str) -> List[str]:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="solution.py",
+        prog="optimiser.py",
         description="Task B: fulfilment split optimiser.",
     )
     parser.add_argument("--input", default="-", help="input file, or '-' for stdin (default)")

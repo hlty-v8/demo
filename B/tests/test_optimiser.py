@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from solution import InputFormatError, Warehouse, min_warehouse_count, parse, solve
+from optimiser import InputFormatError, Warehouse, min_warehouse_count, parse, solve
 
 SAMPLE_INPUT = """\
 3 7

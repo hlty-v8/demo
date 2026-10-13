@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import solution
+import optimiser
 
 HERE = Path(__file__).resolve().parent
 SAMPLE_INPUT = HERE / "sample_input.txt"
@@ -17,9 +17,9 @@ def test_sample_files_are_present():
 
 
 def test_cli_input_flag_reproduces_the_expected_output(capsys):
-    exit_code = solution.main(["--input", str(SAMPLE_INPUT)])
+    exit_code = optimiser.main(["--input", str(SAMPLE_INPUT)])
     captured = capsys.readouterr()
 
-    assert exit_code == solution.EXIT_OK
+    assert exit_code == optimiser.EXIT_OK
     assert captured.out == SAMPLE_OUTPUT.read_text(encoding="utf-8")
     assert captured.err == ""

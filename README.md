@@ -27,7 +27,7 @@ executed and what it produced.
 
 ```bash
 cd A
-python solution.py < tests/sample_input.txt   # or: python solution.py --input file.txt
+python ledger.py < tests/sample_input.txt   # or: python ledger.py --input tests/sample_input.txt
 python -m pytest tests -q
 ```
 
@@ -41,7 +41,7 @@ for the state model, the two documented ambiguities the CLI flags resolve
 
 ```bash
 cd B
-python solution.py < tests/sample_input.txt
+python optimiser.py < tests/sample_input.txt
 python -m pytest tests -q
 ```
 
@@ -111,8 +111,8 @@ codes - the OpenAPI page at `/docs` is a supplement, not the contract).
 ## Architecture at a glance
 
 ```
-A/solution.py          parse -> validate -> execute, single pass, two hash maps
-B/solution.py          cost DP (sliding window) + suffix-table reconstruction
+A/ledger.py            parse -> validate -> execute, single pass, two hash maps
+B/optimiser.py         cost DP (sliding window) + suffix-table reconstruction
 C/answers.md           written review
 app/backend/app/       catalog.py (seed)  db.py (SQLite)  models.py (contract)
                        errors.py (envelope)  store.py (all SQL)  main.py (FastAPI)
@@ -207,8 +207,8 @@ Node 24.18, pnpm 11.7):
 | --- | --- | --- |
 | Task A tests | `python -m pytest A/tests -q` | **110 passed** |
 | Task B tests | `python -m pytest B/tests -q` | **204 passed** (incl. 160 exhaustive-search differential cases) |
-| Task A sample | `python solution.py --input tests/sample_input.txt` | matches the statement's expected output byte for byte |
-| Task B sample | `python solution.py --input tests/sample_input.txt` | `1 27` / `CN 7` |
+| Task A sample | `python A/ledger.py --input A/tests/sample_input.txt` | matches the statement's expected output byte for byte |
+| Task B sample | `python B/optimiser.py --input B/tests/sample_input.txt` | `1 27` / `CN 7` |
 | Backend tests | `python -m pytest app/backend/tests -q` | **39 passed, 36 skipped** (HTTP suites, see below) |
 | Frontend tests | `pnpm test` (vitest) | **29 passed** |
 | Frontend typecheck | `pnpm typecheck` (`tsc --noEmit`) | clean |

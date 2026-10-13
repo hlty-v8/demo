@@ -48,7 +48,7 @@ jobs:
           set +e
           overall=0
           reported=0
-          for module in test_store test_endpoints test_contract test_catalog test_cart test_idempotency test_concurrency; do
+          for module in test_store test_endpoints test_contract test_catalog test_cart test_idempotency test_concurrency test_live_server; do
             echo "::group::$module"
             python -m pytest "app/backend/tests/$module.py" -q --tb=short > "/tmp/$module.log" 2>&1
             code=$?
@@ -69,8 +69,8 @@ jobs:
 
       - name: Documented CLI examples still match the statement
         run: |
-          diff <(python A/solution.py --input A/tests/sample_input.txt) A/tests/sample_output.txt
-          diff <(python B/solution.py --input B/tests/sample_input.txt) B/tests/sample_output.txt
+          diff <(python A/ledger.py --input A/tests/sample_input.txt) A/tests/sample_output.txt
+          diff <(python B/optimiser.py --input B/tests/sample_input.txt) B/tests/sample_output.txt
 
   frontend:
     name: Variant PDP frontend
