@@ -83,13 +83,22 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture()
 def db_path(tmp_path: Path) -> str:
-    return str(tmp_path / "pdp-test.sqlite3")
+    """A seeded database file.
+
+    It is initialised here rather than only inside ``create_app``: helpers such
+    as ``test_concurrency.set_stock`` write to the database *before* the first
+    app is built, and an uninitialised path would make sqlite3 create an empty
+    file ("no such table: skus"). ``init_db`` is idempotent, so the later
+    ``create_app`` calls are unaffected.
+    """
+    path = str(tmp_path / "pdp-test.sqlite3")
+    db_module.init_db(path)
+    return path
 
 
 @pytest.fixture()
 def connection(db_path: str) -> Iterator[sqlite3.Connection]:
-    """A seeded database plus one open connection (no event loop needed)."""
-    db_module.init_db(db_path)
+    """An open connection to the seeded database (no event loop needed)."""
     conn = db_module.connect(db_path)
     try:
         yield conn
