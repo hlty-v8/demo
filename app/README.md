@@ -227,12 +227,18 @@ columns from 900px, verified in the browser at both widths.
 | `test_store.py` | SQLite write path: stock decrement, replay, key reuse, atomic rollback, rejected requests leaving no trace, 2- and 8-thread oversell races, catalogue shape |
 | `test_endpoints.py` | endpoint bodies with real `Request`/`Response`: cart cookie, `Idempotency-Key` validation, replay, error mapping, SVG route |
 | `test_contract.py` | the OpenAPI document: documented paths, 201 on the cart POST, the header parameter, the error envelope |
+| `test_live_server.py` | a **real uvicorn server over real TCP**: health, catalogue, cookie round trip, idempotent replay, 409/404/400 envelopes, SVG. Point it at a server you started yourself with `PDP_LIVE_BASE_URL=http://127.0.0.1:8000`; otherwise it starts one (and skips, never silently, only where that is impossible outside CI) |
 | `test_catalog.py`, `test_cart.py`, `test_idempotency.py`, `test_concurrency.py` | the same guarantees driven over HTTP through Starlette's `TestClient` |
 
-The last four need an asyncio event loop. On a host where loopback connections
-are blocked (asyncio's self-pipe is a loopback socketpair on Windows) they are
-skipped with an explicit reason instead of hanging the suite - see the
-verification log in the repository README.
+The last four need an asyncio event loop. `conftest.py` probes for a usable one
+once, with a timeout, and skips those modules with an explicit reason instead of
+hanging the run on a host where loopback connections are blocked.
+
+The frontend has two test layers: `pnpm test` (vitest + jsdom) for the unit and
+component behaviour, and `pnpm e2e` (Playwright) which drives a real Chromium
+against the production build proxied to a real uvicorn process - variant
+selection, add-to-cart, cookie survival across a reload, impossible/sold-out
+variants, and the 375px/1280px layouts.
 
 `app/frontend/src`:
 

@@ -89,8 +89,9 @@ download.
 cd app/frontend
 pnpm install
 pnpm dev        # http://localhost:5173, proxies /api to the backend
-pnpm test       # vitest
+pnpm test       # vitest: unit + component tests
 pnpm build      # tsc --noEmit && vite build
+pnpm e2e        # Playwright: real browser, real API (needs `pnpm exec playwright install chromium` once)
 ```
 
 ### Both at once (optional convenience)
@@ -200,40 +201,47 @@ decision can be explained. Disclosure, honestly and specifically:
 
 ## Verification log
 
-Executed on the machine that produced this repository (Windows, Python 3.14.6,
-Node 24.18, pnpm 11.7):
+Everything below was executed. "Local" is the machine that produced this
+repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
+`.github/workflows/ci.yml` on `ubuntu-latest`.
 
 | Check | Command | Result |
 | --- | --- | --- |
+| Everything, one command | `python -m pytest -q` (repository root) | **389 passed, 7 skipped** |
 | Task A tests | `python -m pytest A/tests -q` | **110 passed** |
 | Task B tests | `python -m pytest B/tests -q` | **204 passed** (incl. 160 exhaustive-search differential cases) |
-| Task A sample | `python A/ledger.py --input A/tests/sample_input.txt` | matches the statement's expected output byte for byte |
-| Task B sample | `python B/optimiser.py --input B/tests/sample_input.txt` | `1 27` / `CN 7` |
-| Backend tests | `python -m pytest app/backend/tests -q` | **39 passed, 36 skipped** (HTTP suites, see below) |
+| Backend tests (local) | `python -m pytest app/backend/tests -q` | **75 passed, 7 skipped** - the 7 are the live-server module, which needs a server started outside pytest here (see below) |
+| Backend tests (CI) | same, per module | **82 passed** - including the 36 `TestClient` HTTP tests and the 7 live-server tests |
+| Task A/B samples | `python A/ledger.py --input A/tests/sample_input.txt`, same for B | byte-identical to the statement's expected output |
 | Frontend tests | `pnpm test` (vitest) | **29 passed** |
-| Frontend typecheck | `pnpm typecheck` (`tsc --noEmit`) | clean |
+| Frontend typecheck | `pnpm typecheck` | clean (includes the Playwright specs) |
 | Frontend build | `pnpm build` | succeeds (≈155 kB JS, ≈50 kB gzip) |
+| Browser end-to-end | `pnpm e2e` (Playwright, CI) | 4 tests: variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
 
-The 36 skipped backend tests are the HTTP-level suites that drive the app through
-Starlette's `TestClient`. On this particular machine, **loopback TCP connections
-time out**, and Windows asyncio builds its self-pipe from `socket.socketpair()`,
-which is a loopback connection - so no asyncio event loop can be created, and any
-ASGI client (or `uvicorn` itself) would block forever. This is a property of the
-host, not of the code:
+### Two host quirks worth recording
+
+**1. asyncio needs loopback.** On Windows, asyncio builds its self-pipe from
+`socket.socketpair()`, which is a loopback TCP connection. While this host was
+dropping loopback connections, no event loop could be created at all, so
+`uvicorn` and Starlette's `TestClient` hung - which is why the HTTP suites were
+originally skipped. The condition later cleared on the same host, and the whole
+suite now runs (389 passed from the repository root). `conftest.py` still probes
+for it and skips the HTTP modules with an explicit reason rather than hanging, so
+the suite behaves sensibly on a host with that restriction.
+
+**2. A process spawned by Python cannot serve local connections here.** Measured
+directly:
 
 ```
-socket.socketpair()                        -> times out
-bind/listen + connect on 127.0.0.1        -> TimeoutError after 4s
-asyncio.run(asyncio.sleep(0))              -> blocks
+pwsh   -> python -> socket.socketpair()   -> ok
+python -> python -> socket.socketpair()   -> hangs
 ```
 
-`app/backend/tests/conftest.py` detects this once, with a timeout, and skips the
-HTTP modules with that explanation instead of hanging the run. To keep the same
-guarantees verified anyway, those suites are backed by two event-loop-free
-modules that always run: `tests/test_store.py` (stock decrement, idempotency
-replay, key reuse, atomic rollback, two-thread and eight-thread oversell races)
-and `tests/test_endpoints.py` (cookie issuance, `Idempotency-Key` validation,
-error mapping, replay), plus `tests/test_contract.py` (the OpenAPI document).
-On a machine with working loopback, `pnpm`-less reviewers get the full 36 as
-well - nothing in the skipped files is known to fail; they simply have not been
-executed here.
+That is why `app/backend/tests/test_live_server.py` accepts
+`PDP_LIVE_BASE_URL`: on this host the server is started from the shell and the
+test is pointed at it (`PDP_LIVE_BASE_URL=http://127.0.0.1:8124 python -m pytest
+app/backend/tests/test_live_server.py -q` → **7 passed** against a real uvicorn
+over real TCP, including the `Set-Cookie`/`Cookie` round trip and an idempotent
+replay). In CI, and on any ordinary machine, the module starts uvicorn itself and
+is never skipped - under CI it *fails* rather than skipping, so a silent skip can
+never hide a regression.
