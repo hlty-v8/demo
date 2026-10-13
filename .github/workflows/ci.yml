@@ -150,40 +150,7 @@ jobs:
           sed -r 's/\x1B\[[0-9;]*[mGK]//g' /tmp/e2e.log | tail -n 40
           if [ "$code" -ne 0 ]; then
             echo "::error::browser e2e failed (exit $code)"
-            python - <<'PY'
-import json
-import pathlib
-
-try:
-    report = json.loads(pathlib.Path("/tmp/e2e.json").read_text())
-except Exception as exc:  # noqa: BLE001
-    print(f"::error::could not read the Playwright JSON report: {exc}")
-    raise SystemExit(0)
-
-
-def emit(text: str) -> None:
-    for line in str(text).splitlines()[:6]:
-        if line.strip():
-            print(f"::error::{line[:900]}")
-
-
-def walk(suite: dict) -> None:
-    for spec in suite.get("specs", []):
-        for test in spec.get("tests", []):
-            for result in test.get("results", []):
-                if result.get("status") != "passed":
-                    print(f"::error::FAILED {spec.get('title')} [{result.get('status')}]")
-                    for error in result.get("errors") or []:
-                        emit(error.get("message") or error.get("value") or "")
-    for child in suite.get("suites", []):
-        walk(child)
-
-
-for top in report.get("suites", []):
-    walk(top)
-for error in report.get("errors") or []:
-    emit(error.get("message") or error.get("value") or "")
-PY
+            python ../../.github/scripts/annotate_playwright.py /tmp/e2e.json
           fi
           exit $code
 
