@@ -46,7 +46,10 @@ export default defineConfig({
       env: { PDP_DB_PATH: `var/e2e-${Date.now()}.sqlite3` },
     },
     {
-      command: `pnpm preview --port ${WEB_PORT} --strictPort`,
+      // --host 127.0.0.1 explicitly: `vite preview` otherwise binds whatever
+      // "localhost" resolves to, which on some runners is ::1 only - and the
+      // readiness probe below (and the browser) use 127.0.0.1.
+      command: `pnpm preview --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
       url: webUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
