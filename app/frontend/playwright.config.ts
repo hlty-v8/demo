@@ -32,11 +32,15 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: `python -m uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --log-level warning`,
+      command: `python -m uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --log-level info`,
       cwd: "../backend",
       url: `${apiUrl}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      // Piped rather than ignored: if the server refuses to start, its own error
+      // is what explains the generic "Timed out waiting ... from config.webServer".
+      stdout: "pipe",
+      stderr: "pipe",
       // A fresh database per run keeps the stock assertions exact; the files
       // live in the git-ignored app/backend/var/ directory.
       env: { PDP_DB_PATH: `var/e2e-${Date.now()}.sqlite3` },
@@ -46,6 +50,8 @@ export default defineConfig({
       url: webUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      stdout: "pipe",
+      stderr: "pipe",
       env: { VITE_API_TARGET: apiUrl },
     },
   ],

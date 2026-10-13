@@ -151,6 +151,10 @@ jobs:
           if [ "$code" -ne 0 ]; then
             echo "::error::browser e2e failed (exit $code)"
             python ../../.github/scripts/annotate_playwright.py /tmp/e2e.json
+            # The last lines usually carry the reason a webServer never came up.
+            sed -r 's/\x1B\[[0-9;]*[mGK]//g' /tmp/e2e.log | grep -v '^[[:space:]]*$' | tail -n 8 | while IFS= read -r line; do
+              echo "::error::log: ${line:0:900}"
+            done
           fi
           exit $code
 
