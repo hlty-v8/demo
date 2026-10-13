@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# The app database is created and seeded on first start
+app/backend/var/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Node / frontend build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment and secrets - never commit these
+.env
+.env.*
+!.env.example
+
+# Editors and OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

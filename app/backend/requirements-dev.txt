@@ -1,0 +1,8 @@
+-r requirements.txt
+
+pytest>=8.0
+
+# Starlette's TestClient drives the app over ASGI. Current Starlette releases
+# warn that `httpx2` is the supported package going forward and still accept
+# `httpx`; swap the line below for `httpx2` if your Starlette version requires it.
+httpx>=0.27

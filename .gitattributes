@@ -1,0 +1,8 @@
+# Normalise line endings in the repository regardless of the contributor's OS.
+* text=auto eol=lf
+
+# Binary-ish assets that must never be rewritten.
+*.png binary
+*.jpg binary
+*.ico binary
+*.sqlite3 binary

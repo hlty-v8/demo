@@ -1,0 +1,10 @@
+# esbuild ships a postinstall step that links its platform binary. Approving it
+# keeps `pnpm install` from exiting non-zero with ERR_PNPM_IGNORED_BUILDS.
+#
+# pnpm 11+ reads `allowBuilds`; pnpm 10 reads `onlyBuiltDependencies` (also
+# declared under "pnpm" in package.json for pnpm 9). Both are listed so a fresh
+# clone installs cleanly across versions.
+allowBuilds:
+  esbuild: true
+onlyBuiltDependencies:
+  - esbuild
