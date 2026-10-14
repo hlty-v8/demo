@@ -12,6 +12,12 @@ python ledger.py --input input.txt    # file input
 pytest tests -q                          # tests
 ```
 
+## Dependencies
+
+The program imports the Python **standard library only** (`argparse`, `re`,
+`sys`, `dataclasses`, `pathlib`, `typing`) - there is no third-party runtime
+dependency and nothing to install to run it. The tests need `pytest`.
+
 Exit codes: `0` success, `2` unusable header (empty input, bad `S`/`N`),
 `3` the number of command lines does not match the declared `N`. Diagnostics
 go to stderr; stdout stays exactly the required output.

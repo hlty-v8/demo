@@ -35,9 +35,11 @@ if (-not $SkipChecks) {
 }
 
 Write-Host "Starting the API on http://127.0.0.1:$ApiPort ..."
-$api = Start-Process -PassThru -FilePath "python" -ArgumentList @(
-    "-m", "uvicorn", "app.main:app", "--port", "$ApiPort", "--app-dir", $backend
-)
+# Working directory app/backend - the same way the test suite and CI start it,
+# so the command here is one that is actually exercised.
+$api = Start-Process -PassThru -FilePath "python" `
+    -ArgumentList @("-m", "uvicorn", "app.main:app", "--port", "$ApiPort") `
+    -WorkingDirectory $backend
 
 try {
     Write-Host "Starting the frontend (Vite) - open http://localhost:5173 ..."

@@ -30,7 +30,10 @@ if [ ! -d "$here/frontend/node_modules" ]; then
 fi
 
 echo "Starting the API on http://127.0.0.1:$api_port ..."
-python -m uvicorn app.main:app --port "$api_port" --app-dir "$here/backend" &
+# Started from app/backend - the same way the test suite and CI start it, so the
+# command here is one that is actually exercised.
+cd "$here/backend"
+python -m uvicorn app.main:app --port "$api_port" &
 api_pid=$!
 
 cleanup() {

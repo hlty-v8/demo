@@ -23,6 +23,22 @@ executed and what it produced.
 * Node **18+** and [pnpm](https://pnpm.io) 9+ (developed on Node 24 / pnpm 11)
 * No other services: storage is SQLite and the seed data ships with the code
 
+## Dependencies
+
+Named in full, as requested. Nothing outside these is imported anywhere, and no
+hosted service, solver or database server is involved.
+
+| Part | Runtime | Development / test |
+| --- | --- | --- |
+| A, B | **Python standard library only** - no third-party imports | `pytest` |
+| C | none - it is a document | - |
+| app backend | `fastapi`, `uvicorn` ([`app/backend/requirements.txt`](app/backend/requirements.txt)) | `pytest`, `httpx` ([`app/backend/requirements-dev.txt`](app/backend/requirements-dev.txt)) |
+| app frontend | `react`, `react-dom` | `typescript`, `vite`, `@vitejs/plugin-react`, `vitest`, `jsdom`, `@testing-library/{react,dom,jest-dom,user-event}`, `@playwright/test` ([`app/frontend/package.json`](app/frontend/package.json)) |
+
+Versions are pinned by `app/backend/requirements*.txt`, `app/frontend/package.json`
+and `app/frontend/pnpm-lock.yaml`. Everything is installable from the public
+package registries (`pip`, the npm registry) with no credentials.
+
 ## Task A - inventory reservation ledger
 
 ```bash

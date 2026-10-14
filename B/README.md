@@ -16,6 +16,13 @@ python optimiser.py --input input.txt    # file input
 pytest tests -q                          # tests
 ```
 
+## Dependencies
+
+The program imports the Python **standard library only** (`argparse`, `re`,
+`sys`, `array`, `collections.deque`, `dataclasses`, `pathlib`, `typing`) - no
+external optimiser, solver or third-party package is used, as the task requires.
+The tests need `pytest`.
+
 Exit codes: `0` success (including the infeasible answer `-1`), `2` malformed or
 out-of-constraint input, reported on stderr. `-1` is printed only for the
 genuine "cannot fulfil this order" case.
