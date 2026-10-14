@@ -6,7 +6,7 @@ Scope: a worker-based service syncing invoices between an internal order system 
 
 ## C1 — Connection validation: proving OAuth and tenant selection before reading invoices
 
-Xero separates **authorisation** (the token proves the user consented) from **tenant targeting** (a header says which organisation). A token is not scoped to one organisation, so a successful token call proves nothing about tenant access. Validate in order; fail closed at each step.
+Xero separates **authorisation** (the token proves the user consented) from **tenant targeting** (a header names the organisation). A token is not scoped to one organisation, so a successful token call proves nothing about tenant access. Validate in order and fail closed at each step.
 
 ### 1. Token endpoint — identity level
 
@@ -36,8 +36,7 @@ Checks:
 2. **`tenantType == "ORGANISATION"`.** Accounting needs an organisation tenant; `PRACTICEMANAGER`/`PRACTICE` have no accounting API and often return `tenantName: null`.
 3. **Intended `tenantId` present, exactly.** Keep local records in sync — connections are deleted when the user disconnects the app, loses tenant permissions, or the tenant is deleted.
 4. **`authEventId` matches the `authentication_event_id` claim** decoded from the access-token JWT after a fresh consent flow (filter `?authEventId=<uuid>`); unfiltered, the response returns every tenant the user *ever* connected.
-5. **`createdDateUtc != updatedDateUtc`** ⇒ disconnected then reconnected.
-6. **Scopes as expected.** Assert `accounting.invoices` (read/write: Invoices, CreditNotes, Quotes, PurchaseOrders, Items, RepeatingInvoices) or `accounting.invoices.read` for GET-only; add `accounting.contacts` if you resolve contacts. Broad `accounting.transactions[.read]` still works for pre-March-2026 apps but retires September 2027.
+5. **Scopes as expected.** Assert `accounting.invoices` (read/write) or `accounting.invoices.read` for GET-only; add `accounting.contacts` if you resolve contacts. Broad `accounting.transactions[.read]` still works for pre-March-2026 apps but retires September 2027.
 
 ### 3. Cheap tenant-scoped probe — tenant usable, not just listed
 
@@ -88,9 +87,9 @@ Capture the status, body, and headers — especially `WWW-Authenticate`, `X-Rate
 - **Genuinely missing resource** (`/Invoices/{InvoiceID}`) or deleted.
 
 **4. Environment configuration.**
-- Base URLs: `api.xero.com/connections`, `api.xero.com/api.xro/2.0/...`, `identity.xero.com/connect/token`, `identity.xero.com/connect/revocation`, `login.xero.com/identity/connect/authorize`.
+- Base URLs: `identity.xero.com` (token, revocation, authorize), `api.xero.com/connections`, `api.xero.com/api.xro/2.0/...`.
 - **There is no separate sandbox host.** The demo company is an ordinary organisation on the production API; only `tenantId` distinguishes it. Config that swaps a "sandbox base URL" is wrong by construction.
-- **The demo company resets** 28 days after creation (or on demand, or on country change), invalidating the connection — reconnect. A demo tenant that "suddenly 403/404s" is usually a reset.
+- **The demo company resets** 28 days after creation (or on demand), invalidating the connection — reconnect. A demo tenant that "suddenly 403/404s" is usually a reset.
 - Per-environment credentials and tenant IDs must be separate secrets; dev must never read a production connection row.
 
 **5. Statuses most often misread.**
@@ -100,9 +99,6 @@ Capture the status, body, and headers — especially `WWW-Authenticate`, `X-Rate
 | 401 + `insufficient_scope` | Missing granular scope | Expired token |
 | 403 | Tenant not authorised / missing header / user role | Expired token, "API down" |
 | 404 | Wrong base URL or path; object in another tenant | Auth failure, data loss |
-| 400 | Validation error; or >100k invoices returned | Rate limit |
-| 412 | Precondition failed — includes TLS 1.0 clients | Auth failure |
-| 503 | Scheduled outage; or organisation offline | Auth failure |
 
 ---
 
@@ -111,7 +107,7 @@ Capture the status, body, and headers — especially `WWW-Authenticate`, `X-Rate
 **Pagination.**
 - `?page=1` alone returns the default page size **100**. `?page=1&pageSize=1000` uses `pageSize` *with* `page`: default 100, **max 1000**, min 1. Out-of-range values are **clamped, not rejected** (`pageSize=5000` silently yields 1000), so validate client-side and never infer effective size from what you sent.
 - Responses carry `pagination{page,pageSize,pageCount,itemCount}`. Drive the loop from `pageCount`, not the superseded "short page" heuristic.
-- Paging exists on Invoices, Contacts, CreditNotes, BankTransactions, ManualJournals, Payments, PurchaseOrders, Prepayments, Overpayments. Paged Invoices return **all line items**, removing per-invoice follow-ups.
+- Paged responses (Invoices and the other major endpoints) return **all line items**, removing per-invoice follow-ups.
 - **High-volume guard:** a `GET /Invoices` returning (or filtering/ordering toward) more than 100k invoices is rejected with **400**. Prefer `Statuses=`, `IDs=`, `InvoiceNumbers=`, `ContactIDs=`, `summaryOnly=true`.
 - Default ordering is `UpdatedDateUTC ASC, [ID] ASC`, giving stable page ordering — do not add an `order` clause that removes that determinism.
 
@@ -150,29 +146,17 @@ Use `Retry-After` as the floor when present; cap in-request time and let the que
 - Per-tenant token bucket at 60/min with headroom (stop starting work at `<10` remaining) so interactive calls are not starved.
 - **Daily governor:** stop backfill for a tenant at ~80% of `X-DayLimit-Remaining`; prioritise incremental over backfill.
 - **Queues:** one logical queue per tenant, fair round-robin across tenants, so one noisy org cannot consume the app-wide minute allowance. Batch writes — Xero suggests ~50 elements per request (≤3.5 MB).
-- **Retry budget + circuit breaker:** per tenant, cap retries at ~20% of calls or N consecutive failures; open a breaker per `tenantId` on sustained 429/5xx, half-open probe, resume. Keep a global breaker for `503`. Honour `503` organisation-offline with ~5-minute retry intervals.
+- **Retry budget + circuit breaker:** per tenant, cap retries at ~20% of calls or N consecutive failures; open a breaker per `tenantId` on sustained 429/5xx, half-open probe, resume. Keep a global breaker for `503`.
 
-**Never retry.**
+**Never retry:** `400` (bad payload — fix the data or mapping), `401` (refresh once, then re-authorise; never loop), `401` + `insufficient_scope` (needs a new OAuth flow), `403` (tenant not authorised, missing/malformed header, or user role), `404` (wrong URL, wrong tenant routing, or deleted resource), `412` (failed precondition, notably TLS 1.0 clients).
 
-| Status | Retry? | Why |
-|---|---|---|
-| `400` validation | **No** | Bad payload; retrying reproduces it. Fix data/mapping. |
-| `401` without refreshing | **No** | Refresh once, then re-authorise. Never loop. |
-| `401` + `insufficient_scope` | **No** | Scope/consent problem; needs a new OAuth flow. |
-| `403` | **No** | Tenant not authorised, missing/malformed header, or user role. |
-| `404` | **No** | Wrong URL, wrong tenant routing, or deleted resource. |
-| `412` | **No** | Failed precondition — notably TLS 1.0 clients. Fix the client. |
-| `429` | **Yes** | With `Retry-After`, bounded retries, jitter. |
-| `500` | **Yes** | Transient; bounded exponential backoff. |
-| `503` | **Yes** | Maintenance or org offline; back off minutes, not seconds. |
-
-**Rule:** retry only when the same request could succeed unchanged (`429`, `5xx`, network/timeout). Any other `4xx` is permanent until the request, credentials, scopes or tenant targeting change. Classify on `status + X-Rate-Limit-Problem + WWW-Authenticate` and record the classification on a metric so misclassification is visible rather than silent.
+**Retry:** `429` (honour `Retry-After`, bounded, jittered), `500` and `503` (transient; `503` backs off in minutes, not seconds), and network timeouts — only when the same request could succeed unchanged. Classify on `status + X-Rate-Limit-Problem + WWW-Authenticate` and record the classification on a metric so misclassification is visible rather than silent.
 
 ---
 
 ## C5 — Data integrity: timeouts while creating an invoice
 
-**Failure mode:** the worker issues the create; Xero creates the invoice but the response is lost to a timeout. The worker treats it as "not created", retries, and duplicates the invoice. Standard 5xx/network retry logic is precisely what causes it.
+**Failure mode:** the create succeeds but its response is lost to a timeout; the worker treats it as "not created", retries, and duplicates the invoice. Ordinary 5xx/network retry logic is what causes it.
 
 **Verified behaviour — the brief's premise is out of date.** The brief asks me to check whether the Accounting API lacks a general `Idempotency-Key`. **It does not lack one.** Xero publishes an official *Idempotent requests* page, and its OpenAPI specification defines an `Idempotency-Key` parameter on mutating operations:
 
@@ -205,7 +189,7 @@ on timeout / 5xx / unknown outcome:
 ```
 Never decide "not created" from a timeout alone — the only safe negative is a completed `GET` returning zero matches. Poll with bounded attempts and backoff, allowing for propagation delay.
 
-**Compensation / voiding.** Correct duplicates through Xero's lifecycle, not deletion: set `Status=VOIDED` (or `DELETED` for drafts) via `POST /api.xro/2.0/Invoices/{InvoiceID}`, or raise an `ACCRECCREDIT` credit note where voiding is inappropriate (already paid or part-paid). Voiding is a financial event — require an approval trail, never automate silently, and note a voided invoice remains in reporting history. Match later runs on the immutable `xero_invoice_id`, not on user-editable numbers.
+**Compensation / voiding.** Correct duplicates through Xero's lifecycle, not deletion: `Status=VOIDED` (or `DELETED` for drafts) via `POST /api.xro/2.0/Invoices/{InvoiceID}`, or an `ACCRECCREDIT` credit note where voiding is inappropriate (paid or part-paid). Voiding is a financial event: require an approval trail, never automate silently, and note it stays in reporting history. Match later runs on the immutable `xero_invoice_id`, not user-editable numbers.
 
 ---
 
@@ -217,11 +201,11 @@ Log fields: `correlation_id`, `run_id`, `tenant_id` (plus a non-PII alias), `con
 
 **Metrics** (per tenant, plus aggregate): `xero_sync_lag_seconds` (`now − cursor_utc`, the primary SLO signal); cursor position/advance counters (stalled cursors); `xero_http_requests_total{status_class,endpoint}` with explicit `401/403/404/429/5xx` counters per tenant; remaining-limit gauges and `xero_rate_limit_hits_total{problem}`; retries and `retry_budget_exhausted`; circuit-breaker state; `xero_reconciliation_total{outcome}`; `xero_duplicate_suspected_total`; `xero_token_refresh_total{result}` and token age; `xero_validation_errors_total` (must stay non-retryable, never inflating retry counters).
 
-**Alerts.** Sync lag above threshold *for N tenants* (a global average hides one stalled tenant); sustained 401/403 for a tenant (needs re-consent — notify the tenant-facing owner, not just on-call); 429 above baseline, or any `X-Rate-Limit-Problem: Concurrent` (cap is broken); retry budget exhausted / breaker open; **any** reconciliation outcome `ambiguous`; refresh failures (act before the 30-minute grace period expires); duplicate-suspected invoices (page); any observed `insufficient_scope`.
+**Alerts.** Sync lag above threshold *for N tenants* (a global average hides one stalled tenant); sustained 401/403 for a tenant (needs re-consent — notify the tenant-facing owner, not just on-call); 429 above baseline, or any `X-Rate-Limit-Problem: Concurrent` (the cap is broken); retry budget exhausted / breaker open; **any** `ambiguous` reconciliation outcome; refresh failures (act before the 30-minute grace period expires); duplicate-suspected invoices; any observed `insufficient_scope`.
 
-**Never log or emit.** Access, refresh and ID tokens — not in logs, traces, metric labels, error messages, exception payloads or crash dumps. Client secrets, `Authorization`/Basic headers and full request headers; never a full `Bearer` value — if a header must be recorded, use a redacted prefix plus a keyed hash. Customer PII in payload bodies (line descriptions, contact names, emails, addresses, bank account numbers, tax identifiers) — log the *shape* (field names, counts) and the Xero `InvoiceID`, never the body. Watch SDK debug modes that print headers verbatim.
+**Never log or emit.** Access, refresh and ID tokens — not in logs, traces, metric labels, error messages or crash dumps. Client secrets, `Authorization`/Basic headers, and never a full `Bearer` value (record a redacted prefix plus a keyed hash if a header must be kept). Customer PII in payload bodies (line descriptions, contact names, emails, addresses, bank numbers, tax identifiers) — log the *shape* (field names, counts) and the Xero `InvoiceID`, never the body. Watch SDK debug modes that print headers verbatim.
 
-**Storage and rotation.** Keep tokens, client secrets and per-tenant credentials in a **secret manager** (Secrets Manager / Vault) or in a column **encrypted at rest with envelope encryption** and a KMS-held key — never in code, repositories, environment defaults, or plaintext DB/Redis. Encrypt **refresh tokens specifically**: the long-lived credential (60 days) granting ongoing access. **Access tokens** are short-lived (30 min) — refresh proactively rather than reacting to a 401. **Refresh rotation:** Xero issues a new refresh token on every refresh and invalidates the old one, so persist the new value in the same transaction that consumes it, or serialise refreshes per connection with a lock; a lost rotation locks the connection out. **Revocation:** `POST identity.xero.com/connect/revocation` and/or `DELETE api.xero.com/connections/{connectionId}` — `DELETE` does **not** invalidate tokens, so use both. **Key rotation:** rotate client secrets and KMS keys on a schedule and on personnel change, supporting two active secrets during cutover. **Scopes:** granular scopes need fresh consent, so surface an "Update Permissions" path rather than treating `insufficient_scope` as an outage; plan for the September 2027 broad-scope retirement. Request the narrowest scope and never reuse production credentials in dev.
+**Storage and rotation.** Keep tokens, client secrets and per-tenant credentials in a **secret manager** (Secrets Manager / Vault) or a column **encrypted at rest with envelope encryption** and a KMS-held key — never in code, repositories, environment defaults or plaintext DB/Redis; encrypt **refresh tokens** in particular, being the long-lived (60-day) credential. **Access tokens** last 30 minutes: refresh proactively rather than reacting to a 401. **Refresh rotation:** Xero issues a new refresh token on every refresh and invalidates the old one, so persist the new value in the transaction that consumes it, or serialise refreshes per connection with a lock; a lost rotation locks the connection out. **Revocation:** `POST identity.xero.com/connect/revocation` and/or `DELETE api.xero.com/connections/{connectionId}` — `DELETE` does **not** invalidate tokens, so use both. **Key rotation:** rotate client secrets and KMS keys on a schedule and on personnel change, with two active secrets during cutover. **Scopes:** granular scopes need fresh consent, so surface an "Update Permissions" path rather than treating `insufficient_scope` as an outage; plan for the September 2027 broad-scope retirement. Request the narrowest scope; never reuse production credentials in dev.
 
 ---
 
@@ -229,7 +213,7 @@ Log fields: `correlation_id`, `run_id`, `tenant_id` (plus a non-PII alias), `con
 
 - **API version:** Xero **Accounting API 2.0**, base `https://api.xero.com/api.xro/2.0`; OAuth 2.0 authorisation-code flow with `offline_access`. OAuth 1.0a is retired.
 - **Spec baseline:** `xero_accounting.yaml` **version 19.1.0** (`XeroAPI/Xero-OpenAPI`).
-- **SDK:** none is required by this design. Where Python is implied it is the official **`xero-python`** (`xero_python.accounting.AccountingApi`, `xero_python.identity.IdentityApi`). Its documented `get_invoices` signature exposes `page` but not `pageSize`, and its `create_invoices` example does not surface an idempotency-key argument — so pass those via client header/query configuration or call the endpoints directly, and verify the installed version. The header exists at the API level regardless.
+- **SDK:** none is required by this design. Where Python is implied it is the official **`xero-python`** (`xero_python.accounting.AccountingApi`, `xero_python.identity.IdentityApi`). Its documented signatures do not surface `pageSize` or an idempotency-key argument, so pass those via client header/query configuration or call the endpoints directly, and verify the installed version. The header exists at the API level regardless.
 - **Tenant model:** one connected organisation per `tenantId`; a token is cached per user/connection and reused across tenants.
 - **Demo vs production:** one production API host; the demo company is an ordinary organisation distinguished only by `tenantId`, resetting 28 days after creation.
 - **Idempotency:** `Idempotency-Key` exists on mutating Accounting API operations with the semantics in C5 (6-minute cache, per-app, 400 on key/request conflict, errors cached). Because the window is 6 minutes, deterministic keys plus read-before-write remain required for durable duplicate prevention.

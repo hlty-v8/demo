@@ -103,6 +103,55 @@ jobs:
       - name: Production build
         run: pnpm build
 
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The image is built with the same Dockerfile a reviewer would use, then
+      # exercised over HTTP: the SPA sold from the same origin as the API, and
+      # an idempotent cart write.
+      - name: Build the image
+        run: docker build --tag variant-pdp:ci .
+
+      - name: Start the container and wait for it to be healthy
+        run: |
+          docker run --detach --name pdp --publish 8000:8000 variant-pdp:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/api/health > /dev/null; then
+              echo "healthy after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the container never became healthy" >&2
+          docker logs pdp
+          exit 1
+
+      - name: Smoke-test the API and the SPA served by the image
+        run: |
+          set -eux
+          curl --fail --silent http://127.0.0.1:8000/api/health
+          curl --fail --silent http://127.0.0.1:8000/ | grep -q 'id="root"'
+          curl --fail --silent http://127.0.0.1:8000/api/products/aurora-trail-runner | head -c 120; echo
+          first=$(curl --fail --silent --request POST http://127.0.0.1:8000/api/cart/items \
+            --header 'Content-Type: application/json' --header 'Idempotency-Key: ci-container' \
+            --data '{"sku_id":"EMB-38","quantity":1}')
+          second=$(curl --fail --silent --request POST http://127.0.0.1:8000/api/cart/items \
+            --header 'Content-Type: application/json' --header 'Idempotency-Key: ci-container' \
+            --data '{"sku_id":"EMB-38","quantity":1}')
+          test "$first" = "$second"
+          echo "idempotent replay verified"
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs pdp || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm --force pdp || true
+
   e2e:
     name: Browser end-to-end
     runs-on: ubuntu-latest

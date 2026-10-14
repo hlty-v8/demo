@@ -25,14 +25,17 @@ Cross-cutting decisions:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 from contextlib import closing
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Header, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import catalog
 from . import db as db_module
@@ -225,6 +228,13 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         # is indistinguishable from the original response.
         response.status_code = status_code
         return body
+
+    # Single-container deployment: when a built frontend is handed to us, serve
+    # it from the same origin as the API, so the SPA's relative /api calls need
+    # no proxy and no CORS handling. Mounted last, so the API routes above win.
+    static_dir = os.environ.get("PDP_STATIC_DIR")
+    if static_dir and Path(static_dir).is_dir():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="spa")
 
     return app
 

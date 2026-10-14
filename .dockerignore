@@ -1,0 +1,40 @@
+# Keep the image build context small and deterministic: only source and manifests
+# are sent to the daemon.
+
+.git
+.github
+.gitignore
+.gitattributes
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/var/
+**/*.sqlite3
+**/*.sqlite3-wal
+**/*.sqlite3-shm
+
+# Node / build output
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+
+# Playwright artefacts
+**/playwright-report/
+**/test-results/
+**/blob-report/
+
+# Editors and OS noise
+**/.vscode/
+**/.idea/
+**/.DS_Store
+**/Thumbs.db
+
+# Local documentation, not needed in the image
+A/
+B/
+C/
+*.md
+!app/**/*.md

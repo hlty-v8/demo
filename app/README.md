@@ -33,6 +33,18 @@ is a SQLite file created and seeded on first start (`app/backend/var/pdp.sqlite3
 override with `PDP_DB_PATH`), so the shop is populated the moment the server
 starts.
 
+### Container
+
+```bash
+docker build -t variant-pdp .          # from the repository root
+docker run --rm -p 8000:8000 -v pdp-data:/data variant-pdp
+```
+
+The image is one process on one port. Node builds the SPA in the first stage;
+the Python stage receives `dist/` and serves it at `/` when `PDP_STATIC_DIR` is
+set, so the API and the page share an origin - no proxy, no CORS, and the cart
+cookie is first-party. The database lives on the `/data` volume.
+
 ## Domain model
 
 One product (`aurora-trail-runner`) with two option dimensions, **Colour**

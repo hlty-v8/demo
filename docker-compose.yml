@@ -1,0 +1,27 @@
+# One container, one port: the API and the built SPA are served by the same
+# process, so the cart cookie is first-party and no proxy is needed.
+#
+#   docker compose up --build      then open http://127.0.0.1:8000
+#   docker compose down            (add -v to drop the database volume)
+#
+# The SQLite file lives on a named volume, so the seeded catalogue and any carts
+# survive a rebuild.
+
+services:
+  pdp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: variant-pdp:local
+    ports:
+      - "8000:8000"
+    environment:
+      PDP_DB_PATH: /data/pdp.sqlite3
+      # Seeding is idempotent: the catalogue is inserted only when the database
+      # is empty, so an existing volume is left alone.
+    volumes:
+      - pdp-data:/data
+    restart: unless-stopped
+
+volumes:
+  pdp-data:

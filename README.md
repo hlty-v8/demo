@@ -102,7 +102,22 @@ app/run.ps1         # Windows PowerShell
 ```
 
 Two terminals are still the clearer way to develop; the script only exists so a
-reviewer can start everything with one command. Backend contract, error model,
+reviewer can start everything with one command.
+
+### Container (single image, single port)
+
+```bash
+docker build -t variant-pdp .
+docker run --rm -p 8000:8000 -v pdp-data:/data variant-pdp
+# or, equivalently:  docker compose up --build
+```
+
+One process serves both the API and the compiled SPA: the multi-stage
+[`Dockerfile`](Dockerfile) builds the frontend with Node, then hands `dist/` to
+the Python stage, which serves it from `/` (`PDP_STATIC_DIR`) alongside `/api`.
+Same origin means the cart cookie is first-party and no proxy is involved. The
+SQLite file lives on a volume and is seeded on first start. The image is built
+and smoke-tested on every push by the `container` CI job. Backend contract, error model,
 concurrency approach and frontend design decisions are documented in
 [`app/README.md`](app/README.md) (with request/response examples and status
 codes - the OpenAPI page at `/docs` is a supplement, not the contract).
@@ -119,6 +134,9 @@ app/backend/app/       catalog.py (seed)  db.py (SQLite)  models.py (contract)
                        errors.py (envelope)  store.py (all SQL)  main.py (FastAPI)
 app/backend/tests/     store, endpoints, contract, plus HTTP-level suites
 app/frontend/src/      api/ (transport)  domain/ (pure logic)  hooks/  components/
+app/frontend/e2e/      Playwright specs (real Chromium against a real server)
+Dockerfile             multi-stage: Node builds the SPA, Python serves it and the API
+.github/workflows/     CI: tests on Linux, browser e2e, container build
 ```
 
 Two rules are applied consistently across the repository:
@@ -210,7 +228,7 @@ repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
 | Everything, one command | `python -m pytest -q` (repository root) | **389 passed, 7 skipped** |
 | Task A tests | `python -m pytest A/tests -q` | **110 passed** |
 | Task B tests | `python -m pytest B/tests -q` | **204 passed** (incl. 160 exhaustive-search differential cases) |
-| Backend tests (local) | `python -m pytest app/backend/tests -q` | **75 passed, 7 skipped** - the 7 are the live-server module, which needs a server started outside pytest here (see below) |
+| Backend tests (local) | `python -m pytest app/backend/tests -q` | **75 passed, 7 skipped** when this host's loopback works, **39 passed, 43 skipped** when it does not; CI always runs all **82** |
 | Backend tests (CI) | same, per module | **82 passed** - including the 36 `TestClient` HTTP tests and the 7 live-server tests |
 | Task A/B samples | `python A/ledger.py --input A/tests/sample_input.txt`, same for B | byte-identical to the statement's expected output |
 | Frontend tests | `pnpm test` (vitest) | **29 passed** |
@@ -220,14 +238,24 @@ repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
 
 ### Two host quirks worth recording
 
-**1. asyncio needs loopback.** On Windows, asyncio builds its self-pipe from
-`socket.socketpair()`, which is a loopback TCP connection. While this host was
-dropping loopback connections, no event loop could be created at all, so
-`uvicorn` and Starlette's `TestClient` hung - which is why the HTTP suites were
-originally skipped. The condition later cleared on the same host, and the whole
-suite now runs (389 passed from the repository root). `conftest.py` still probes
-for it and skips the HTTP modules with an explicit reason rather than hanging, so
-the suite behaves sensibly on a host with that restriction.
+**1. asyncio needs loopback, and this host provides it intermittently.** On
+Windows, asyncio builds its self-pipe from `socket.socketpair()`, which is a
+loopback TCP connection. This host alternates between allowing and dropping
+connections to a local listener - measured directly, within minutes, with a
+self-limiting watchdog probe run across every combination of interpreter
+(system, venv) and directory (build tree, delivered tree): all four "ok" at
+16:29, all four "blocked" at 16:33. Both local outcomes are therefore correct
+and expected:
+
+```
+loopback up    python -m pytest -q   ->  389 passed, 7 skipped
+loopback down  python -m pytest -q   ->  353 passed, 43 skipped
+CI (Linux)                           ->  everything, always
+```
+
+`conftest.py` probes once, with a timeout, and skips the HTTP modules with an
+explicit reason instead of hanging - which is why the suite is usable on this
+host at all. The full 82-test backend suite is verified on every push by CI.
 
 **2. A process spawned by Python cannot serve local connections here.** Measured
 directly:
@@ -245,3 +273,17 @@ over real TCP, including the `Set-Cookie`/`Cookie` round trip and an idempotent
 replay). In CI, and on any ordinary machine, the module starts uvicorn itself and
 is never skipped - under CI it *fails* rather than skipping, so a silent skip can
 never hide a regression.
+
+### The documented setup was executed at the delivered location
+
+```bash
+cd app/backend
+python -m venv .venv && .venv/Scripts/activate     # Windows
+pip install -r requirements-dev.txt
+cd ../.. && python -m pytest -q                    # 353-389 passed, as above
+cd app/frontend && pnpm install --frozen-lockfile  # includes @playwright/test
+pnpm typecheck && pnpm test && pnpm build          # clean, 29 passed, built
+```
+
+`app/backend/.venv`, `node_modules/` and the SQLite files are all git-ignored, so
+the repository itself stays clean.

@@ -38,6 +38,7 @@ HTTP_TEST_MODULES = {
     "test_idempotency.py",
     "test_concurrency.py",
     "test_live_server.py",
+    "test_static_site.py",
 }
 
 
