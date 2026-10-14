@@ -107,7 +107,8 @@ pnpm install
 pnpm dev        # http://localhost:5173, proxies /api to the backend
 pnpm test       # vitest: unit + component tests
 pnpm build      # tsc --noEmit && vite build
-pnpm e2e        # Playwright: real browser, real API (needs `pnpm exec playwright install chromium` once)
+pnpm e2e        # Playwright: real browser, real API (needs `pnpm exec playwright install chromium` once,
+                # or `E2E_CHANNEL=chrome pnpm e2e` to use an installed Chrome instead of downloading one)
 ```
 
 ### Both at once (optional convenience)
@@ -241,56 +242,48 @@ repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Everything, one command | `python -m pytest -q` (repository root) | **389 passed, 7 skipped** |
+| Everything, one command | `python -m pytest -q` (repository root) | **402 passed** |
 | Task A tests | `python -m pytest A/tests -q` | **110 passed** |
 | Task B tests | `python -m pytest B/tests -q` | **204 passed** (incl. 160 exhaustive-search differential cases) |
-| Backend tests (local) | `python -m pytest app/backend/tests -q` | **75 passed, 7 skipped** when this host's loopback works, **39 passed, 43 skipped** when it does not; CI always runs all **82** |
-| Backend tests (CI) | same, per module | **88 passed** - including the 36 `TestClient` HTTP tests, the 7 live-server tests and the 6 single-origin SPA tests |
+| Backend tests (local) | `python -m pytest app/backend/tests -q` | **88 passed** - run per module as CI does: store 21, endpoints 12, contract 6, catalog 8, cart 16, idempotency 8, concurrency 4, live-server 7, static-site 6 |
+| Backend tests (CI) | same, per module | **88 passed** on `ubuntu-latest` |
 | Task A/B samples | `python A/ledger.py --input A/tests/sample_input.txt`, same for B | byte-identical to the statement's expected output |
 | Frontend tests | `pnpm test` (vitest) | **29 passed** |
 | Frontend typecheck | `pnpm typecheck` | clean (includes the Playwright specs) |
 | Frontend build | `pnpm build` | succeeds (≈155 kB JS, ≈50 kB gzip) |
-| Browser end-to-end | `pnpm e2e` (Playwright) | **4 passed in CI** (Chromium against the production build proxied to a real uvicorn): variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
+| Browser end-to-end | `pnpm e2e` (Playwright) | **4 passed locally** against Chrome and the production build proxied to a real uvicorn, and **4 passed in CI** with downloaded Chromium: variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
 | Container image | `docker build` + smoke test (CI) | **passed**: image builds, becomes healthy, serves `/api/health`, serves the SPA at `/`, and an idempotent cart replay is byte-identical |
 | One-command startup | `app/run.sh` executed in CI | **passed**: starts uvicorn and the Vite dev server, serves the page, and `/api/health` + `/api/products/...` answer through Vite's proxy |
 
-### Two host quirks worth recording
+### One host quirk worth recording (diagnosed and fixed)
 
-**1. asyncio needs loopback, and this host provides it intermittently.** On
-Windows, asyncio builds its self-pipe from `socket.socketpair()`, which is a
-loopback TCP connection. This host alternates between allowing and dropping
-connections to a local listener - measured directly, within minutes, with a
-self-limiting watchdog probe run across every combination of interpreter
-(system, venv) and directory (build tree, delivered tree): all four "ok" at
-16:29, all four "blocked" at 16:33. Both local outcomes are therefore correct
-and expected:
+**asyncio needs loopback, and on this host a third-party filter driver was
+dropping it.** On Windows, asyncio builds its self-pipe from
+`socket.socketpair()`, which is a loopback TCP connection. That connection was
+being dropped *intermittently* - while, in the same minute, connections to other
+local listeners (the GUI on `127.0.0.1:19387`, `redis`, `Sogou`, `WPS`) worked
+fine, and rebinding to `0.0.0.0`, the LAN address or `::1` changed nothing. So
+the filter was neither global nor address-based.
 
-```
-loopback up    python -m pytest -q   ->  389 passed, 7 skipped
-loopback down  python -m pytest -q   ->  353 passed, 43 skipped
-CI (Linux)                           ->  everything, always
-```
+What it was: a **Sangfor aTrust** zero-trust driver, `aTrustNetflt_0`
+(`...\Sangfor\aTrust\NetfltDriver\SdpNetFilter0.sys`), **loaded and running while
+its own services were stopped** - a deny-by-default filter with no control
+channel. Windows Defender's real-time protection was off, and the Windows
+Firewall profiles had no rules for any of the interpreters concerned.
 
-`conftest.py` probes once, with a timeout, and skips the HTTP modules with an
-explicit reason instead of hanging - which is why the suite is usable on this
-host at all. The full 82-test backend suite is verified on every push by CI.
+After uninstalling aTrust: the driver is gone from the driver list, six
+consecutive probe samples over 90 seconds all passed (previously it flapped
+within minutes), and the local suite went from `353 passed, 49 skipped` to
+**`402 passed, 0 skipped`**, including the 36 `TestClient` HTTP tests, the 7
+live-server tests and the 6 single-origin SPA tests.
 
-**2. A process spawned by Python cannot serve local connections here.** Measured
-directly:
-
-```
-pwsh   -> python -> socket.socketpair()   -> ok
-python -> python -> socket.socketpair()   -> hangs
-```
-
-That is why `app/backend/tests/test_live_server.py` accepts
-`PDP_LIVE_BASE_URL`: on this host the server is started from the shell and the
-test is pointed at it (`PDP_LIVE_BASE_URL=http://127.0.0.1:8124 python -m pytest
-app/backend/tests/test_live_server.py -q` → **7 passed** against a real uvicorn
-over real TCP, including the `Set-Cookie`/`Cookie` round trip and an idempotent
-replay). In CI, and on any ordinary machine, the module starts uvicorn itself and
-is never skipped - under CI it *fails* rather than skipping, so a silent skip can
-never hide a regression.
+The guards stay in place because they cost nothing and they protect anyone
+running this repository on a machine with a similar filter:
+`app/backend/tests/conftest.py` probes for a usable event loop once, with a
+timeout, and skips the HTTP modules with an explicit reason instead of hanging;
+`test_live_server.py` accepts `PDP_LIVE_BASE_URL` so a server started outside
+pytest can be used instead of spawning one. Neither is a substitute for the CI
+run, where everything executes on every push.
 
 ### The documented setup was executed at the delivered location
 
@@ -298,9 +291,13 @@ never hide a regression.
 cd app/backend
 python -m venv .venv && .venv/Scripts/activate     # Windows
 pip install -r requirements-dev.txt
-cd ../.. && python -m pytest -q                    # 353-389 passed, as above
+cd ../.. && python -m pytest -q                    # 402 passed
 cd app/frontend && pnpm install --frozen-lockfile  # includes @playwright/test
 pnpm typecheck && pnpm test && pnpm build          # clean, 29 passed, built
+# Browser e2e. If the Chromium download is blocked on your network, point
+# Playwright at an installed browser instead; activate the venv first so the
+# config's `python -m uvicorn` finds the API dependencies:
+E2E_CHANNEL=chrome pnpm e2e                        # 4 passed
 ```
 
 `app/backend/.venv`, `node_modules/` and the SQLite files are all git-ignored, so

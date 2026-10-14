@@ -252,6 +252,14 @@ against the production build proxied to a real uvicorn process - variant
 selection, add-to-cart, cookie survival across a reload, impossible/sold-out
 variants, and the 375px/1280px layouts.
 
+Two practical notes for the e2e run:
+
+* it starts the API with `python -m uvicorn`, so **activate `app/backend/.venv`
+  first** (or otherwise have the API dependencies on PATH) when they live in a
+  virtualenv;
+* if the Chromium download is blocked, `E2E_CHANNEL=chrome pnpm e2e` uses an
+  already-installed Chrome or Edge instead of downloading a browser.
+
 `app/frontend/src`:
 
 * `domain/variant.test.ts` - variant resolution, availability, quantity clamping,

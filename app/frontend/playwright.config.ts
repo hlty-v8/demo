@@ -16,6 +16,16 @@ const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4173);
 const apiUrl = `http://127.0.0.1:${API_PORT}`;
 const webUrl = `http://127.0.0.1:${WEB_PORT}`;
 
+// Optional escape hatch: use a browser that is already installed instead of
+// downloading Chromium, e.g. `E2E_CHANNEL=chrome pnpm e2e`. Verified on a
+// machine where the browser CDN stalls. The backend command below uses whatever
+// `python` is on PATH, so activate app/backend/.venv first when the API
+// dependencies live there.
+const channel =
+  process.env.E2E_CHANNEL === "chrome" || process.env.E2E_CHANNEL === "msedge"
+    ? process.env.E2E_CHANNEL
+    : undefined;
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -28,8 +38,14 @@ export default defineConfig({
   use: {
     baseURL: webUrl,
     trace: "retain-on-failure",
+    ...(channel ? { channel } : {}),
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], ...(channel ? { channel } : {}) },
+    },
+  ],
   webServer: [
     {
       command: `python -m uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --log-level info`,
