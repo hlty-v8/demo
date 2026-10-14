@@ -192,23 +192,29 @@ jobs:
           set +e
           bash ../run.sh > /tmp/run-sh.log 2>&1 &
           runner=$!
-          ready=0
+          # Vite advertises http://localhost:5173 and may bind IPv6 only, so
+          # accept whichever form actually answers.
+          web=""
           for attempt in $(seq 1 45); do
-            if curl --fail --silent http://127.0.0.1:5173/ > /tmp/index.html 2>/dev/null; then
-              ready=1
-              break
-            fi
+            for candidate in http://127.0.0.1:5173 http://localhost:5173; do
+              if curl --fail --silent "$candidate/" > /tmp/index.html 2>/dev/null; then
+                web="$candidate"
+                break
+              fi
+            done
+            [ -n "$web" ] && break
             sleep 2
           done
 
           status=0
-          if [ "$ready" -ne 1 ]; then
+          if [ -z "$web" ]; then
             status=1
             echo "::error::the Vite dev server never answered on 5173"
           else
+            echo "the dev server answered on $web"
             grep -q 'id="root"' /tmp/index.html || status=1
-            curl --fail --silent http://127.0.0.1:5173/api/health || status=1
-            curl --fail --silent http://127.0.0.1:5173/api/products/aurora-trail-runner | head -c 120 || status=1
+            curl --fail --silent "$web/api/health" || status=1
+            curl --fail --silent "$web/api/products/aurora-trail-runner" | head -c 120 || status=1
             echo
           fi
 
