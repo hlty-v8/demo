@@ -42,8 +42,17 @@ HTTP_TEST_MODULES = {
 }
 
 
-def _event_loop_available(timeout: float = 2.0) -> bool:
-    """True when asyncio can build an event loop on this machine."""
+def _event_loop_available(timeout: float = 5.0) -> bool:
+    """True when asyncio can build an event loop on this machine.
+
+    The probe has to tell "working" from "blocked"; the host this was developed
+    on flips between those states within minutes (measured: every combination of
+    interpreter and directory allowed at one moment, all blocked four minutes
+    later), so either outcome is normal and neither is a code problem. The
+    timeout is generous so a merely slow loopback is not reported as blocked - a
+    false negative silently skips 49 tests - while a genuinely blocked host pays
+    one five-second wait per pytest session.
+    """
     if sys.platform != "win32":
         return True
 
