@@ -252,6 +252,7 @@ repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
 | Frontend build | `pnpm build` | succeeds (≈155 kB JS, ≈50 kB gzip) |
 | Browser end-to-end | `pnpm e2e` (Playwright) | **4 passed in CI** (Chromium against the production build proxied to a real uvicorn): variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
 | Container image | `docker build` + smoke test (CI) | **passed**: image builds, becomes healthy, serves `/api/health`, serves the SPA at `/`, and an idempotent cart replay is byte-identical |
+| One-command startup | `app/run.sh` executed in CI | **passed**: starts uvicorn and the Vite dev server, serves the page, and `/api/health` + `/api/products/...` answer through Vite's proxy |
 
 ### Two host quirks worth recording
 
