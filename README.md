@@ -229,12 +229,13 @@ repository (Windows, Python 3.14.6, Node 24.18, pnpm 11.7); "CI" is
 | Task A tests | `python -m pytest A/tests -q` | **110 passed** |
 | Task B tests | `python -m pytest B/tests -q` | **204 passed** (incl. 160 exhaustive-search differential cases) |
 | Backend tests (local) | `python -m pytest app/backend/tests -q` | **75 passed, 7 skipped** when this host's loopback works, **39 passed, 43 skipped** when it does not; CI always runs all **82** |
-| Backend tests (CI) | same, per module | **82 passed** - including the 36 `TestClient` HTTP tests and the 7 live-server tests |
+| Backend tests (CI) | same, per module | **88 passed** - including the 36 `TestClient` HTTP tests, the 7 live-server tests and the 6 single-origin SPA tests |
 | Task A/B samples | `python A/ledger.py --input A/tests/sample_input.txt`, same for B | byte-identical to the statement's expected output |
 | Frontend tests | `pnpm test` (vitest) | **29 passed** |
 | Frontend typecheck | `pnpm typecheck` | clean (includes the Playwright specs) |
 | Frontend build | `pnpm build` | succeeds (≈155 kB JS, ≈50 kB gzip) |
 | Browser end-to-end | `pnpm e2e` (Playwright) | **4 passed in CI** (Chromium against the production build proxied to a real uvicorn): variant selection, add-to-cart plus cookie survival across a reload, impossible/sold-out variants, 375px and 1280px layouts without horizontal overflow |
+| Container image | `docker build` + smoke test (CI) | **passed**: image builds, becomes healthy, serves `/api/health`, serves the SPA at `/`, and an idempotent cart replay is byte-identical |
 
 ### Two host quirks worth recording
 

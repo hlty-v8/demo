@@ -48,7 +48,7 @@ jobs:
           set +e
           overall=0
           reported=0
-          for module in test_store test_endpoints test_contract test_catalog test_cart test_idempotency test_concurrency test_live_server; do
+          for module in test_store test_endpoints test_contract test_catalog test_cart test_idempotency test_concurrency test_live_server test_static_site; do
             echo "::group::$module"
             python -m pytest "app/backend/tests/$module.py" -q --tb=short > "/tmp/$module.log" 2>&1
             code=$?
